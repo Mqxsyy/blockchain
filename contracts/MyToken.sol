@@ -2,8 +2,9 @@ pragma solidity >=0.8.2 <0.9.0;
 // SPDX-License-Identifier: MIT
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "contracts/interfaces/IMyTokenError.sol";
 
-contract MyToken is IERC20 {
+contract MyToken is IERC20, IMyTokenError {
     uint256 _totalSupply;
     string private _name;
     string private _symbol;
@@ -11,7 +12,11 @@ contract MyToken is IERC20 {
     mapping(address => uint256) private _balances;
     mapping(address => mapping(address => uint256)) private _allowances;
 
-    constructor(string memory name_, string memory symbol_, uint totalSupply_) {
+    constructor(
+        string memory name_,
+        string memory symbol_,
+        uint256 totalSupply_
+    ) {
         _name = name_;
         _symbol = symbol_;
 
@@ -54,11 +59,36 @@ contract MyToken is IERC20 {
             updateBalances(_from, _to, _value);
         }
 
+        emit Transfer(_from, _to, _value);
+
         return success;
     }
 
-    function transfer(address _to, uint256 _value) public returns (bool) {
-        return transferFrom(msg.sender, _to, _value);
+    function _transfer(
+        address _from,
+        address _to,
+        uint256 _value
+    ) internal {
+        if (_from == address(0)) revert InvalidSenderAddress(_from);
+
+        if (_to == address(0)) revert InvalidReceiverAddress(_to);
+
+        _update(_from, _to, _value);
+    }
+
+    function _update(
+        address _from,
+        address _to,
+        uint256 _value
+    ) internal {
+        if (_balances[_from] < _value) {
+            revert InsufficientBalance(_from, _balances[_from], _value);
+        }
+
+        _balances[_from] -= _value;
+        _balances[_to] += _value;
+
+        emit Transfer(_from, _to, _value);
     }
 
     function updateAllowance(
@@ -67,11 +97,11 @@ contract MyToken is IERC20 {
         uint256 _value
     ) private returns (bool) {
         if (_from == address(0)) {
-            return false;
+            revert InvalidSenderAddress(_from);
         }
 
         if (_to == address(0)) {
-            return false;
+            revert InvalidReceiverAddress(_to);
         }
 
         if (_allowances[_from][_to] < _value) {
@@ -88,19 +118,19 @@ contract MyToken is IERC20 {
         uint256 _value
     ) private returns (bool) {
         if (_from == address(0)) {
-            return false;
+            revert InvalidSenderAddress(_from);
         }
 
         if (_to == address(0)) {
-            return false;
+            revert InvalidReceiverAddress(_to);
         }
 
-        if (_balances[_from] < _value) {
-            return false;
-        }
+        _update(_from, _to, _value);
+        return true;
+    }
 
-        _balances[_from] -= _value;
-        _balances[_to] += _value;
+    function transfer(address _to, uint256 _value) public returns (bool) {
+        _transfer(msg.sender, _to, _value);
         return true;
     }
 
@@ -113,11 +143,25 @@ contract MyToken is IERC20 {
     }
 
     function approve(address _spender, uint256 _value) public returns (bool) {
-        if (_spender == address(0)) {
-            return false;
-        }
-        
-        _allowances[msg.sender][_spender] = _value;
+        _approve(msg.sender, _spender, _value);
         return true;
+    }
+
+    function _approve(
+        address _owner,
+        address _spender,
+        uint256 _value
+    ) internal {
+        if (_spender == address(0)) {
+            revert InvalidSpenderAddress(_spender);
+        }
+
+        if (_owner == address(0)) {
+            revert InvalidOwnerAddress(_owner);
+        }
+
+        _allowances[msg.sender][_spender] = _value;
+
+        emit Approval(msg.sender, _spender, _value);
     }
 }
